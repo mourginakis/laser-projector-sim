@@ -138,11 +138,14 @@
         ;; mirrorp1 (->Mirror [10 1 1] [10 8 1] [10 8 2] [10 1 8])
         ;; mirrorp1 (->Mirror [13 -5 -3] [13 -5 3] [10 5 3] [10 5 -3])
 
+
+        points    (reflections ray0 [mirror0 mirror1 mirror2 mirror3])
+        segments  (trace ray0 [mirror0 mirror1 mirror2 mirror3])
         
-        segments (trace ray0 [mirror0 mirror1 mirror2 mirror3])
-        laserbeam (map->LaserBeam {:segments segments})
+        ;; laserbeam (map->LaserBeam {:segments segments})
+        laserbeam (map->LaserBeam {:points points})
         ]
-    (union (map build [laserbeam
+    (union (map build [#break laserbeam
                        mirror0
                        mirror1 mirror2 mirror3]))
     )

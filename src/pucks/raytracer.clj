@@ -100,13 +100,14 @@
   (reflections [this elements]
     (lazy-seq
      (cons rayorigin
-           (let [[closest distance-to] (get-closest this elements)] 
-             (when-not (infinite? distance-to)
-               (let [[V0 V1] (rayproject this distance-to)
-                     N       (normal closest V1)
-                     N'      (reflect raynormal N)
-                     ray'    (->Ray V1 N')]
-                 (reflections ray' elements)))))))
+           (let [[closest distance-to] (get-closest this elements)]
+             (cond (infinite? distance-to) [(second (rayproject this 400))]
+                   :else
+                   (let [[V0 V1] (rayproject this distance-to)
+                         N       (normal closest V1)
+                         N'      (reflect raynormal N)
+                         ray'    (->Ray V1 N')]
+                     (reflections ray' elements)))))))
   (trace [this elements]
     (trace this elements 0))
   (trace [this elements depth]

@@ -140,11 +140,11 @@
 
 
 
-(defrecord LaserBeam [segments radius beamcolor]
+(defrecord LaserBeam [points radius beamcolor]
   MechanicalPart
   (build [_]
     (->> (with-fn 6 (circle (or radius 0.5)))
-         (extrude-segments segments)
+         (extrude-points points)
          (color (or beamcolor (conj blue 0.7))))))
 
 

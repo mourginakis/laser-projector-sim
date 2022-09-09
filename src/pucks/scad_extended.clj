@@ -48,9 +48,9 @@
   ([points] (extrude-points points (circle 0.5)))
   ([points startshape]
    (let [pairs (partition 2 1 points)]
-     (for [[v0 v1] pairs
-           :let [v' (m/sub v1 v0)]]
-       (->> (extrude-vector v' startshape) (translate v0))))))
+     (for [[V0 V1] pairs
+           :let [V' (m/sub V1 V0)]]
+       (->> (extrude-vector V' startshape) (translate V0))))))
 
 
 
