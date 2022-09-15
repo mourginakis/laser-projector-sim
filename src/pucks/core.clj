@@ -1,8 +1,6 @@
 (ns pucks.core
   (:use  [scad-clj.scad]
-         [scad-clj.model :rename {import scadimport, use scaduse}]
-        ;; [uncomplicate.neanderthal core native]
-        )
+         [scad-clj.model :rename {import scadimport, use scaduse}])
   (:require
    ;; math
    [clojure.core.logic :as logic]
@@ -66,11 +64,11 @@
 ;; (def prism (build (map->Prism {})))
 
 (def bluebeam
-  (map->LaserBeam {:radius 10 :ray (->Ray [0 0 0] [0 0 1]) :divergence 20
+  (map->LaserBeam {:radius 0.5 :points [[0 0 0] [0 0 200]]
                    :beamcolor (conj blue 0.7)}))
 
 (def redbeam
-  (map->LaserBeam {:radius 10 :ray (->Ray [0 0 0] [0 0 1]) :divergence 20
+  (map->LaserBeam {:radius 0.5 :points [[0 0 0] [0 0 200]]
                    :beamcolor (conj red 0.7)}))
 
 
@@ -86,25 +84,27 @@
 ;; Assembly
 
 
-(defrecord MainAssembly []
-  MechanicalPart
-  (build [_]
-    (union
-     ;; hardware
-     (->> galvoholder (rotate [0 0 half]) (translate [400 150 0]))
-     (->> table (translate [0 0 -10]))
+(def MainAssembly
+  (union
+   ;; hardware
+   (->> galvoholder (rotate [0 0 half]) (translate [400 150 0]))
+   (->> table (translate [0 0 -10]))
 
-     ;; lasers
-     (->> bluelaserdiode (rotate [0 quarter 0]) (translate [100 100 20]))
-     (->> redlaserdiode (rotate [0 quarter -quarter]) (translate [155 200 20]))
+   ;; lasers
+   (->> bluelaserdiode (rotate [0 quarter 0]) (translate [100 100 20]))
+   (->> redlaserdiode (rotate [0 quarter -quarter]) (translate [155 200 20]))
 
-     ;; (->> bluebeam (rotate [0 quarter 0]) (translate [100 100 20]))
-     ;; (->> redbeam (rotate [0 quarter -quarter]) (translate [155 200 20]))
 
-     ;; optics
-     (->> lensparabola (rotate [0 0 0]) (translate [130 100 20]))
-     ;; (->> prism (rotate [0 0 0]) (translate [150 100 20]))
-     )))
+   (->> bluebeam build (rotate [0 quarter 0]) (translate [100 100 20]))
+   (->> redbeam build (rotate [0 quarter -quarter]) (translate [155 200 20]))
+
+
+   ;; optics
+   (->> lensparabola (rotate [0 0 0]) (translate [130 100 20]))
+   ;; (->> prism (rotate [0 0 0]) (translate [150 100 20]))
+   )
+
+  )
 
 
 
@@ -126,6 +126,7 @@
      )))
 
 
+
 (def raytraceexample
   (let [ray0 (->Ray [0 0 0] (m/normalise [1 0 0]))
         
@@ -134,24 +135,15 @@
         mirror2 (map->Sphere {:radius 20 :V [-50 -20 -5]})
         mirror3 (map->Sphere {:radius 15 :V [-50 -50 -65]})
 
-        ;; mirrorp0 (->Mirror [5 1 1] [5 10 1] [5 10 10] [5 1 10])
-        ;; mirrorp1 (->Mirror [10 1 1] [10 8 1] [10 8 2] [10 1 8])
-        ;; mirrorp1 (->Mirror [13 -5 -3] [13 -5 3] [10 5 3] [10 5 -3])
+        mirrorp0 (-> (make-mirror 15 5)
+                     (rotate- [0 0.5 1.6])
+                     (translate- [20 30 -22]))
 
-
-        points    (reflections ray0 [mirror0 mirror1 mirror2 mirror3])
-        segments  (trace ray0 [mirror0 mirror1 mirror2 mirror3])
+        points (trace ray0 [mirror0 mirror1 mirror2 mirror3 mirrorp0])
         
-        ;; laserbeam (map->LaserBeam {:segments segments})
-        laserbeam (map->LaserBeam {:points points})
-        ]
-    (union (map build [#break laserbeam
-                       mirror0
-                       mirror1 mirror2 mirror3]))
-    )
-  )
-
-
+        laserbeam (map->LaserBeam {:points points})]
+    (union
+     (map build [laserbeam mirror0 mirror1 mirror2 mirror3 mirrorp0]))))
 
 
 
@@ -167,9 +159,11 @@
 (spit "pucks.scad"
       (write-scad
        
+       ;; extrude-along-path-example
 
-
-       raytraceexample
+       ;; raytraceexample
+        MainAssembly
+       
        ;; (build (->MainAssembly))
        ;;(build (->BeamTestAssembly))
        ))

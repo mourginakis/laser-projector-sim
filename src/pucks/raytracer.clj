@@ -1,15 +1,13 @@
 (ns pucks.raytracer
   (:use  [scad-clj.scad]
          [scad-clj.model :rename {import scadimport, use scaduse}]
-         [numeric.expresso.core]
-        ;; [uncomplicate.neanderthal core native]
-         )
+         [numeric.expresso.core])
   (:require
    [pucks.colors :refer :all]
    [clojure.core.matrix :as m]
    [pucks.scad-extended :refer :all]
    [clojure.math :refer [acos atan2 sqrt pow]]
-   ))
+   [same.core :refer [zeroish? not-zeroish?]]))
 
 
 ;; Ray tracing primer
@@ -31,17 +29,15 @@
 (defprotocol OpticalPart
   (distance [this ray]
     "calculate the distance between [this-obj] and a ray")
-  (point? [this point]
+  (point-on? [this point]
     "test if this point lies on the surface of [this-obj]")
   (normal [this] [this point]
     "calculate the normal vector of [this-obj] at a point"))
 
 
 (defprotocol RayTrace
-  (trace [this [elements]] [this [elements] depth]
-    "trace a ray over a set of reflective elements, return a vector of points")
-  (reflections [this elements]
-    "returns a lazy seq of all points")
+  (trace [this elements]
+    "returns a lazy seq of all points along a reflective path")
   (get-closest [this elements]
     "returns the closest element, and its distance")
   (rayproject [this distance]
@@ -83,12 +79,7 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;
-;; Raytracing & Raycasting
-
-
-
-
-
+;; Raytracing
 
 
 (defrecord Ray [rayorigin raynormal]
@@ -97,33 +88,16 @@
     (->> elements
          (map (fn [element] [element (distance element this)]))
          (sort-by second) first))
-  (reflections [this elements]
+  (rayproject [this distance]
+    [rayorigin (m/add rayorigin (m/dot raynormal distance))])
+  (trace [this elements]
     (lazy-seq
      (cons rayorigin
            (let [[closest distance-to] (get-closest this elements)]
-             (cond (infinite? distance-to) [(second (rayproject this 400))]
-                   :else
-                   (let [[V0 V1] (rayproject this distance-to)
-                         N       (normal closest V1)
-                         N'      (reflect raynormal N)
-                         ray'    (->Ray V1 N')]
-                     (reflections ray' elements)))))))
-  (trace [this elements]
-    (trace this elements 0))
-  (trace [this elements depth]
-    ;; TODO: update this to make lazy with lazy-seq and put it as
-    ;; a method of record Ray and erase the dirty multi-arity implementation
-    (let [closest (first (sort-by #(distance % this) elements))
-          dist     (distance closest this)]
-      (cond (infinite? dist) [(rayproject this 400)]
-            (> depth 20)     []
-            :else
-            (let [segment  (rayproject this dist)
-                  normal'  (reflect (:raynormal this) (normal closest (second segment)))
-                  ray'     (->Ray (second segment) normal')]
-              (cons segment (trace ray' elements (inc depth)))))))
-  (rayproject [this distance]
-    [rayorigin (m/add rayorigin (m/dot raynormal distance))]))
+             (if (infinite? distance-to) [(second (rayproject this 400))]
+                 (let [[V0 V1] (rayproject this distance-to)]
+                   (trace (->Ray V1 (reflect raynormal (normal closest V1)))
+                          elements))))))))
 
 
 
@@ -151,7 +125,7 @@
             (neg? distance)  ##Inf
             (zero? distance) ##Inf
             :else            distance)))
-  (point? [this point] "not implemented")
+  (point-on? [this point] "not implemented")
   (normal [this point] (m/normalise (m/sub point (:V this)))))
 
 
@@ -162,47 +136,18 @@
     (let [{:keys [V0 V1 V2 V3]} this
           Q V0, E (:rayorigin ray), D (:raynormal ray), N (normal this)
           t (m/div (m/dot N (m/sub Q E)) (m/dot N D))
-          P0 (m/dot t D)]
-      (if (point? this P0) t ##Inf)))
-  (point? [this P0]
+          P0 (m/add (m/dot t D) E)]
+      (if (and (not-zeroish? t) (point-on? this P0)) t ##Inf)))
+  (point-on? [this P0]
     (let [{:keys [V0 V1 V2 V3]} this]
-      (and (every? pos? (m/le (m/sub (m/dot V0 V1) V0)
-                              (m/sub (m/dot P0 V1) V0)
-                              (m/sub (m/dot V1 V1) V0)))
-           (every? pos? (m/le (m/sub (m/dot V0 V3) V0)
-                              (m/sub (m/dot P0 V3) V0)
-                              (m/sub (m/dot V3 V3) V0))))))
-  (normal [this] (m/normalise (m/cross (m/sub V2 V1) (m/sub V0 V1))))
-  (normal [this point] (normal this)))
-
-
-
-
-;; correct solution
-;; (let [V0 [10 1 1] V1 [10 2 1] V2 [10 2 2] V3 [10 1 2]
-;;       P0 [10 1.5 1.5]]
-;;   (and (every? pos?
-;;                (m/le (m/sub (m/dot V0 V1) V0)
-;;                      (m/sub (m/dot P0 V1) V0)
-;;                      (m/sub (m/dot V1 V1) V0)))
-
-;;        (every? pos?
-;;                (m/le (m/sub (m/dot V0 V3) V0)
-;;                      (m/sub (m/dot P0 V3) V0)
-;;                      (m/sub (m/dot V3 V3) V0)))))
-
-
-;; false solution
-;; (let [V0 [10 1 1] V1 [10 2 1] V2 [10 2 2] V3 [10 1 2]
-;;       P0 [8 1.5 1.5]]
-;;   (and (<= (m/dot V0 (m/sub V1 V0))
-;;            (m/dot P0 (m/sub V1 V0))
-;;            (m/dot V1 (m/sub V1 V0)))
-       
-;;        (<= (m/dot V0 (m/sub V3 V0))
-;;            (m/dot P0 (m/sub V3 V0))
-;;            (m/dot V3 (m/sub V3 V0)))))
-
+      (let [U (m/sub V1 V0) W (m/sub V3 V0)]
+        (and (<= (m/dot U V0) (m/dot U P0) (m/dot U V1))
+             (<= (m/dot W V0) (m/dot W P0) (m/dot W V3))))))
+  (normal
+    ([this]
+     (let [{:keys [V0 V1 V2]} this]
+       (m/normalise (m/cross (m/sub V2 V1) (m/sub V0 V1)))))
+    ([this point] (normal this))))
 
 
 

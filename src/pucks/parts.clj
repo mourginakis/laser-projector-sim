@@ -1,23 +1,27 @@
 (ns pucks.parts
-  (:use  [scad-clj.scad]
-         [scad-clj.model :rename {import scadimport, use scaduse}]
-        ;; [uncomplicate.neanderthal core native]
-         )
   (:require [pucks.colors :refer :all]
+            [scad-clj.model :refer :all]
             [pucks.scad-extended :refer :all]
             [clojure.core.matrix :as m]
-            [clojure.math :refer [acos atan2 sqrt pow]]
-            [pucks.raytracer :refer :all]
-            ))
-
+            [clojure.math :refer [acos atan2 sqrt pow cos sin]]
+            [pucks.raytracer :refer :all]))
 
 
 ;; Protocols
 
 (defprotocol MechanicalPart
-  (build [_]))
+  (build [this]))
 
-(defprotocol Translate)
+
+(defprotocol Transform
+  (affinetransform [this M])
+  (scale- [this [sx sy sz]])
+  (translate- [this [dx dy dz]])
+  (rotatex [this theta])
+  (rotatey [this theta])
+  (rotatez [this theta])
+  (rotate- [this [rx ry rz]]))
+
 
 
 
@@ -33,6 +37,73 @@
 
 
 
+;; Translations
+
+(extend-type Sphere
+  Transform
+  (translate- [this V1]
+    (->Sphere (:radius this) (m/add (:V this) V1))))
+
+
+(extend-type Mirror
+  Transform
+  (affinetransform [this M]
+    ;; affine transform   
+    ;; |x'|      |1 0 0 tx||x|  
+    ;; |y'|   =  |0 1 0 ty||y|
+    ;; |z'|      |0 0 1 tz||z|
+    ;; |1 |      |0 0 0 1 ||1|
+    (apply ->Mirror
+           (vec (for [[x y z] (vals this)
+                      :let [[x' y' z' _] (m/mmul M [x y z 1])]]
+                  [x' y' z']))))
+  (scale- [this [sx sy sz]]
+    (affinetransform this [[sx 0  0  0]
+                           [0  sy 0  0]
+                           [0  0  sz 0]
+                           [0  0  0  1]]))
+  (translate- [this [dx dy dz]]
+    (affinetransform this [[1 0 0 dx]
+                           [0 1 0 dy]
+                           [0 0 1 dz]
+                           [0 0 0 1 ]]))
+  (rotatex [this theta]
+    (affinetransform this [[1  0              0           0]
+                           [0 (cos theta)     (- (sin theta)) 0]
+                           [0 (sin theta) (cos theta) 0]
+                           [0  0              0           1]]))
+  (rotatey [this theta]
+    (affinetransform this [[(cos theta) 0  (sin theta) 0]
+                           [0           1  0               0]
+                           [(- (sin theta)) 0  (cos theta)     0]
+                           [0           0  0               1]]))
+  (rotatez [this theta]
+    (affinetransform this [[(cos theta) (- (sin theta)) 0          0]
+                           [(sin theta) (cos theta)     0          0]
+                           [0           0               1          0]
+                           [0           0               0          1]]))
+  (rotate- [this [rx ry rz]]
+    (-> this (rotatex rx) (rotatey ry) (rotatez rz))))
+
+
+
+
+
+
+
+;; Constructors
+
+(defn make-mirror
+  ([length width] (make-mirror length width {:center true}))
+  ([length width & [{:keys [center]} options]]
+   (let [max-y (/ length 2) max-z (/ width 2)
+         m0 (->Mirror [0 -0.5 -0.5] [0 -0.5 0.5] [0 0.5 0.5] [0 0.5 -0.5])]
+     (if (true? center) (scale- m0 [0 length width])
+         (translate- (make-mirror length width {:center true})
+                     [0 (/ length 2) (/ width 2) ])))))
+
+
+
 
 ;; Mechanical parts
 
@@ -45,7 +116,7 @@
      pcb-width pcb-length pcb-thickness pcb-translation-z
      total-height]
   MechanicalPart
-  (build [_]
+  (build [this]
     (let [base    (->> (cylinder base-radius base-height :center false)
                        (with-fn 30)
                        (color black))
@@ -67,7 +138,7 @@
 
 (defrecord GalvoHolder [L-height L-width L-thickness height galvo-x galvo-y]
   MechanicalPart
-  (build [_]
+  (build [this]
     (let [slot (->> (cube 2 height L-thickness :center false)
                     (rotate [half half 0])
                     (translate [0 0 25]))
@@ -93,7 +164,7 @@
 
 (defrecord OpticalTable [length width thickness hole-radius spacing]
   MechanicalPart
-  (build [_]
+  (build [this]
     (color silver
            (difference
             (cube length width thickness :center false)
@@ -106,7 +177,7 @@
 (defrecord LaserDiode [base-radius base-height
                        head-radius head-height]
   MechanicalPart
-  (build [_]
+  (build [this]
     (let [base  (cylinder base-radius base-height :center false)
           head  (cylinder head-radius head-height :center false)
           glass (cylinder 2 2 :center false) 
@@ -127,7 +198,7 @@
 
 (defrecord LensParabola [a b]
   MechanicalPart
-  (build [_]
+  (build [this]
     (let [parabola (fn [x] (+ (* a x x) (* b x)))
           xs       (range 0 11)
           ys       (map parabola xs)
@@ -157,17 +228,19 @@
   MechanicalPart
   (build [this]
     (let [{:keys [V0 V1 V2 V3]} this
-          norm (m/dot -1 (m/normalise (normal this)))
-          [V4 V5 V6 V7] (map (partial m/add norm) [V0 V1 V2 V3])]
-      (color (conj silver 0.9)
-             (polyhedron [V0 V1 V2 V3 V4 V5 V6 V7]
-                         [[0 1 2 3] ;; bottom
-                          [4 5 1 0] ;; front
-                          [7 6 5 4] ;; top
-                          [5 6 2 1] ;; right
-                          [6 7 3 2] ;; back
-                          [7 4 0 3] ;; left
-                          ])))))
+          anti-norm       (m/mul -1 (m/normalise (normal this)))
+          [V4 V5 V6 V7]   (map (partial m/add anti-norm) [V0 V1 V2 V3])
+          mirror          (polyhedron [V0 V1 V2 V3 V4 V5 V6 V7]
+                                      [[0 1 2 3] ;; bottom
+                                       [4 5 1 0] ;; front
+                                       [7 6 5 4] ;; top
+                                       [5 6 2 1] ;; right
+                                       [6 7 3 2] ;; back
+                                       [7 4 0 3] ;; left
+                                       ])]
+      (union (->> mirror (color (conj silver 0.9)))
+             (->> mirror (translate anti-norm) (color black))))))
+
 
 
 (extend-type Prism
