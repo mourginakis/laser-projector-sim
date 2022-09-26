@@ -174,7 +174,7 @@
   (doseq [x (range 0.52 0.92 0.08)
           y (range 0.52 0.92 0.08)]
     (do
-      (Thread/sleep 200)
+      (Thread/sleep 150)
       (BeamTest x y)
       (println [x y])))
 
@@ -185,7 +185,7 @@
    :xmin 0.92}
   )
 
-(BeamTest 0.6 0.6)
+;; (BeamTest 0.6 0.6)
 
 
 
@@ -225,7 +225,7 @@
          
          ;; extrude-along-path-example
 
-         ;; raytraceexample
+          raytraceexample
          ;;  MainAssembly
          ;; galvoholder
          

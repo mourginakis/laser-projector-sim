@@ -15,3 +15,8 @@ pom.xml.asc
 pucks.scad
 pucks.stl
 *.log
+
+
+# Mac OSX temporary files
+.DS_Store
+**/.DS_Store

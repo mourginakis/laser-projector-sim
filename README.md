@@ -1,10 +1,33 @@
 # pucks
 
-A Clojure library designed to ... well, that part is up to you.
+A clojure project for development and simulation of a laser projector.
+Work in progress, but 100% done in Clojure (my favorite language).
+One day will be converted to an opensource library for CAD and simulation of any type of physical project.
+Basically OpenSCAD + Clojure + Physics Simulation + Realtime Graphics!
+
+Now featuring \*raytracing\*!!!
+And OpenGL support!
+
+## Demo
+
+This project features a raytracing engine for predicting the path of the laser beam. Unfortunately, the rendering is done in OpenSCAD still. I plan on switching to OpenGL for native support in the future, but in the meantime, please enjoy the following gifs of the raytracing functionality. I'm pretty proud of it -- it computes the normals of the surface, and the vector of reflection. It uses the clojure (lazy-seq) macro. Check out the code :).
+
+A demo of the laser-projector emitting a beam from a laser diode, reflecting off two galvos, and hitting a backplate
+![Render1](render1.gif?raw=true "Render1")
+
+A close-up of the galvo action
+![Render2](render2.gif?raw=true "Render2")
+
+Ray tracing demo with an arbitrary number of objects.
+![Render3](render3.png?raw=true "Render3")
+
+
+
+
+
 
 ## Usage
 
-FIXME
 
 ## License
 
