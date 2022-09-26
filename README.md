@@ -13,12 +13,15 @@ And OpenGL support!
 This project features a raytracing engine for predicting the path of the laser beam. Unfortunately, the rendering is done in OpenSCAD still. I plan on switching to OpenGL for native support in the future, but in the meantime, please enjoy the following gifs of the raytracing functionality. I'm pretty proud of it -- it computes the normals of the surface, and the vector of reflection. It uses the clojure (lazy-seq) macro. Check out the code :).
 
 A demo of the laser-projector emitting a beam from a laser diode, reflecting off two galvos, and hitting a backplate
+
 ![Render1](render1.gif?raw=true "Render1")
 
 A close-up of the galvo action
+
 ![Render2](render2.gif?raw=true "Render2")
 
 Ray tracing demo with an arbitrary number of objects.
+
 ![Render3](render3.png?raw=true "Render3")
 
 
