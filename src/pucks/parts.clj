@@ -4,13 +4,17 @@
             [pucks.scad-extended :refer :all]
             [clojure.core.matrix :as m]
             [clojure.math :refer [acos atan2 sqrt pow cos sin]]
-            [pucks.raytracer :refer :all]))
+            [pucks.raytracer :refer :all]
+            [same.core :refer [zeroish? not-zeroish?]]
+            [clojure.spec.alpha :as s]))
 
 
 ;; Protocols
 
 (defprotocol MechanicalPart
-  (build [this]))
+  (build [this] "output a scad-clj data structure")
+  (update-optics [this] [this rot]
+    "transform the optics to match the scad transforms"))
 
 
 (defprotocol Transform
@@ -31,7 +35,6 @@
 (defrecord Prism [normal])
 
 (defrecord Mirror [V0 V1 V2 V3])
-
 
 
 
@@ -94,13 +97,13 @@
 ;; Constructors
 
 (defn make-mirror
-  ([length width] (make-mirror length width {:center true}))
-  ([length width & [{:keys [center]} options]]
-   (let [max-y (/ length 2) max-z (/ width 2)
+  ([length-y width-z] (make-mirror length-y width-z {:center true}))
+  ([length-y width-z & [{:keys [center]} options]]
+   (let [max-y (/ length-y 2) max-z (/ width-z 2)
          m0 (->Mirror [0 -0.5 -0.5] [0 -0.5 0.5] [0 0.5 0.5] [0 0.5 -0.5])]
-     (if (true? center) (scale- m0 [0 length width])
-         (translate- (make-mirror length width {:center true})
-                     [0 (/ length 2) (/ width 2) ])))))
+     (if (true? center) (scale- m0 [0 length-y width-z])
+         (translate- (make-mirror length-y width-z {:center true})
+                     [0 (/ length-y 2) (/ width-z 2) ])))))
 
 
 
@@ -126,40 +129,53 @@
           spindle (->> (cylinder spindle-radius spindle-height :center false)
                        (with-fn 20)
                        (color lightgray))
-          mirror  (->> (cube mirror-width mirror-thickness mirror-height)
-                       (color silver))
+          ;; mirror  (make-mirror mirror-width mirror-height)
           pcb     (->> (cube pcb-length pcb-width pcb-thickness :center false)
                        (translate [0 (/ pcb-width -2) 0])
                        (color wheat))]
       (union base trunk spindle
-             (->> pcb (translate [0 0 pcb-translation-z]))
-             (->> mirror (translate [0 0 mirror-translation-z]))))))
+             (->> pcb (translate [0 0 pcb-translation-z])))))
+  (update-optics [this rot]
+    (-> (make-mirror mirror-width mirror-height)
+        (rotate- [0 0 rot])
+        (translate- [0 0 mirror-translation-z]))))
 
 
-(defrecord GalvoHolder [L-height L-width L-thickness height galvo-x galvo-y]
+
+
+(defrecord GalvoHolder [L-height L-width L-thickness
+                        height-z
+                        galvo-x galvo-y
+                        mirror-x mirror-y
+                        galvo-x-height galvo-y-height]
   MechanicalPart
   (build [this]
-    (let [slot (->> (cube 2 height L-thickness :center false)
+    (let [slot (->> (cube 2 height-z L-thickness :center false)
                     (rotate [half half 0])
                     (translate [0 0 25]))
-          base (extrude-linear {:height height :center false :convexity 10}
+          base (extrude-linear {:height height-z :center false :convexity 10}
                                (polygon [[0,0] [L-width 0] [L-width L-thickness]
                                          [L-thickness L-thickness]
                                          [L-thickness L-height] [0 L-height]]))
           move-x (fn [obj] (->> obj
                                 (rotate [-quarter 0 0])
-                                (translate [40 -25 30])))
+                                (translate [40 -25 galvo-x-height])))
           move-y (fn [obj] (->> obj
                                 (rotate [0 quarter 0])
                                 (rotate [-quarter 0 0])
-                                (translate [-25 40 30])))]
+                                (translate [-25 40 galvo-y-height])))]
+
       (union (difference (->> base (color lightslategray))
-                         (->> galvo-x (scale [1.1 1.1 1.1]) move-x)
+                         (->> galvo-x build (scale [1.1 1.1 1.1]) move-x)
                          (->> slot move-x)
-                         (->> galvo-y (scale [1.1 1.1 1.1]) move-y)
+                         (->> galvo-y build (scale [1.1 1.1 1.1]) move-y)
                          (->> slot move-y))
-             (->> galvo-x move-x)
-             (->> galvo-y move-y)))))
+             (->> galvo-x build move-x)
+             (->> galvo-y build move-y))))
+  (update-optics [this]
+    [(-> mirror-x (rotate- [-quarter 0 0]) (translate- [40 -25 galvo-x-height]))
+     (-> mirror-y (rotate- [0 quarter 0]) (rotate- [-quarter 0 0])
+         (translate- [-25 40 galvo-y-height]))]))
 
 
 (defrecord OpticalTable [length width thickness hole-radius spacing]
@@ -174,8 +190,10 @@
                    (with-fn 12)
                    (translate [x y 0])))))))
 
+
 (defrecord LaserDiode [base-radius base-height
-                       head-radius head-height]
+                       head-radius head-height
+                       beamcolor]
   MechanicalPart
   (build [this]
     (let [base  (cylinder base-radius base-height :center false)
@@ -189,7 +207,7 @@
       (union
        base
        (->> head (translate [0 0 base-height]) (color silver))
-       (->> glass (translate [0 0 (+ base-height 6.1)]) (color blue))
+       (->> glass (translate [0 0 (+ base-height 6.1)]) (color beamcolor))
        (->> prong (rotate [0 0 (* tau 1/3)]))
        (->> prong (rotate [0 0 (* tau 2/3)]))
        (->> prong (rotate [0 0 (* tau 3/3)]))))))
@@ -266,6 +284,50 @@
 
 
 
+;;;;;;;;;;;;;;;;;;;;;;;
+;; Optical Parts
+
+
+;; sphere equation
+;; (x - Xc)^2 + (y-Yc)^2 + (z-Zc)^2 - R^2 = 0
+(extend-type pucks.parts.Sphere
+  OpticalPart
+  (distance [this ray]
+    (let [sphere-to-ray (m/sub (:rayorigin ray) (:V this))
+          a 1
+          b (* 2 (m/dot (:raynormal ray) sphere-to-ray))
+          c (- (m/dot sphere-to-ray sphere-to-ray) (pow (:radius this) 2))
+          discriminant (- (pow b 2) (* 4 a c))
+          distance (/ (- (- b) (sqrt discriminant)) (* 2 a)) 
+          distance2 (solve-fast-quad a b c)]
+      (cond (NaN? distance)  ##Inf
+            (neg? distance)  ##Inf
+            (zero? distance) ##Inf
+            :else            distance)))
+  (point-on? [this point] "not implemented")
+  (normal [this point] (m/normalise (m/sub point (:V this)))))
+
+
+
+(extend-type pucks.parts.Mirror
+  OpticalPart
+  (distance [this ray]
+    (let [{:keys [V0 V1 V2 V3]} this
+          Q V0, E (:rayorigin ray), D (:raynormal ray), N (normal this)]
+      (if (zeroish? (m/dot N D)) ##Inf ;; parallel case, no reflection
+          (let [t (m/div (m/dot N (m/sub Q E)) (m/dot N D))
+                P0 (m/add (m/dot t D) E)]
+            (if (and (not-zeroish? t) (point-on? this P0)) t ##Inf)))))
+  (point-on? [this P0]
+    (let [{:keys [V0 V1 V2 V3]} this]
+      (let [U (m/sub V1 V0) W (m/sub V3 V0)]
+        (and (<= (m/dot U V0) (m/dot U P0) (m/dot U V1))
+             (<= (m/dot W V0) (m/dot W P0) (m/dot W V3))))))
+  (normal
+    ([this]
+     (let [{:keys [V0 V1 V2]} this]
+       (m/normalise (m/cross (m/sub V2 V1) (m/sub V0 V1)))))
+    ([this point] (normal this))))
 
 
 
@@ -278,7 +340,14 @@
 
 
 
-(comment "FOR ALGEBRAIC CONSTRAINTS"
+
+
+
+
+
+
+
+(comment "FOR ALEBRAIC CONSTRAINTS"
 
 ;; Phrozen sonic 4k:  120 x 68 x 130 mm
 

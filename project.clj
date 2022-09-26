@@ -1,3 +1,20 @@
+(require 'leiningen.core.eval)
+
+
+(def JVM-OPTS
+  {:common   []
+   :macosx   ["-XstartOnFirstThread" "-Djava.awt.headless=true"]
+   :linux    []
+   :windows  []})
+
+(defn jvm-opts
+  "Return a complete vector of jvm-opts for the current os."
+  [] (let [os (leiningen.core.eval/get-os)]
+       (vec (set (concat (get JVM-OPTS :common)
+                         (get JVM-OPTS os))))))
+
+
+
 (defproject pucks "0.1.0-SNAPSHOT"
   :description "FIXME: write description"
   :url "http://example.com/FIXME"
@@ -11,5 +28,17 @@
                  [net.mikera/core.matrix "0.62.0"]
                  [org.clojure/math.combinatorics "0.1.6"]
                  [expresso "0.2.2"]
-                 [same/ish "0.1.5"]]
-  :repl-options {:init-ns pucks.core})
+                 [same/ish "0.1.5"]
+
+                 [cider/cider-nrepl "0.28.6"]
+
+                 ;; lwjgl
+
+                 [org.lwjgl/lwjgl "3.3.1"]
+                 [org.lwjgl/lwjgl-glfw "3.3.1"]
+                 [org.lwjgl/lwjgl-opengl "3.3.1"]
+                 [org.lwjgl/lwjgl "3.3.1" :classifier "natives-macos-arm64"]
+                 [org.lwjgl/lwjgl-glfw "3.3.1" :classifier "natives-macos-arm64"]
+                 [org.lwjgl/lwjgl-opengl "3.3.1" :classifier "natives-macos-arm64"]]
+  :repl-options {:init-ns pucks.core}
+  :jvm-opts ^:replace ~(jvm-opts))

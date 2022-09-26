@@ -1,13 +1,11 @@
 (ns pucks.scad-extended
-  (:use  [scad-clj.scad]
-         [scad-clj.model :rename {import scadimport, use scaduse}])
-  (:require
-   [clojure.core.matrix :as m]
-   [clojure.math.combinatorics :as combo]
-   [clojure.math :refer [acos atan2 sqrt pow]]
+  (:require [clojure.core.matrix :as m]
+            [clojure.math.combinatorics :as combo]
+            [clojure.math :refer [acos atan2 sqrt pow]]
 
-   ;; cad
-   [pucks.colors :refer :all]))
+            ;; cad
+            [pucks.colors :refer :all]
+            [scad-clj.model :refer :all]))
 
 
 (def quarter (deg->rad 90))
